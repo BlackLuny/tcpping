@@ -70,42 +70,6 @@ tcpping-client --host example.com -p 80 -c 10
 # Keep TCP connection alive between pings
 tcpping-client --host example.com -p 80 -k
 ```
-
-### Example Test Scenarios
-
-1. Test web server connectivity:
-```bash
-# Test HTTP
-tcpping-client --host google.com -p 80
-
-# Test HTTPS
-tcpping-client --host google.com -p 443
-```
-
-2. Test database connectivity:
-```bash
-# MySQL/MariaDB
-tcpping-client --host db.example.com -p 3306
-
-# PostgreSQL
-tcpping-client --host db.example.com -p 5432
-
-# Redis
-tcpping-client --host cache.example.com -p 6379
-```
-
-3. Load testing with multiple threads:
-```bash
-# 10 concurrent connections
-tcpping-client --host api.example.com -p 443 -t 10
-```
-
-4. Connection stability test:
-```bash
-# Keep connection alive, run 100 pings
-tcpping-client --host api.example.com -p 443 -k -c 100
-```
-
 ## Build from Source
 
 1. Install Rust (if not already installed):
