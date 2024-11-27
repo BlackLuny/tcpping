@@ -4,6 +4,8 @@ use std::time::Instant;
 use tcpping_common::{PingConfig, PingResult, DEFAULT_PACKET_SIZE, DEFAULT_PORT, DEFAULT_THREADS};
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::timeout;
+use std::time::Duration;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -90,16 +92,29 @@ async fn run_ping(config: PingConfig, thread_id: usize, count: u32) -> Result<()
 
 async fn ping_once(addr: &str, size: usize) -> Result<PingResult> {
     let start = Instant::now();
-    let mut stream = TcpStream::connect(addr).await?;
-
-    let data = vec![1u8; size];
-    stream.write_all(&data).await?;
-
-    let mut buf = vec![0u8; size];
-    stream.read_exact(&mut buf).await?;
-
-    Ok(PingResult {
-        rtt: start.elapsed(),
-        bytes: size,
-    })
+    
+    // Set a 5-second timeout for the entire operation
+    let result = timeout(Duration::from_secs(5), async {
+        let mut stream = TcpStream::connect(addr).await?;
+        
+        // Set TCP_NODELAY to disable Nagle's algorithm
+        stream.set_nodelay(true)?;
+        
+        let data = vec![1u8; size];
+        stream.write_all(&data).await?;
+        
+        let mut buf = vec![0u8; size];
+        stream.read_exact(&mut buf).await?;
+        
+        Ok::<_, anyhow::Error>(())
+    }).await;
+    
+    match result {
+        Ok(Ok(())) => Ok(PingResult {
+            rtt: start.elapsed(),
+            bytes: size,
+        }),
+        Ok(Err(e)) => Err(e),
+        Err(_) => anyhow::bail!("connection timed out"),
+    }
 }

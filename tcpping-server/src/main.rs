@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use tcpping_common::{DEFAULT_PACKET_SIZE, DEFAULT_PORT};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -38,23 +39,20 @@ async fn main() -> Result<()> {
     }
 }
 
-async fn handle_connection(socket: TcpStream) {
+async fn handle_connection(mut socket: TcpStream) {
     let mut buf = vec![0u8; DEFAULT_PACKET_SIZE];
 
     loop {
-        match socket.try_read(&mut buf) {
+        match socket.read(&mut buf).await {
             Ok(0) => {
                 // Connection closed
                 break;
             }
             Ok(n) => {
-                if let Err(e) = socket.try_write(&buf[..n]) {
+                if let Err(e) = socket.write_all(&buf[..n]).await {
                     warn!("Failed to write to socket: {}", e);
                     break;
                 }
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                continue;
             }
             Err(e) => {
                 warn!("Failed to read from socket: {}", e);
