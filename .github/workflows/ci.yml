@@ -64,17 +64,11 @@ jobs:
 
     - name: Package Binaries
       run: |
-        mkdir -p dist
+        cd target/${{ matrix.target }}/release
         if [ "${{ runner.os }}" = "Windows" ]; then
-          cp target/${{ matrix.target }}/release/tcpping-client.exe dist/
-          cp target/${{ matrix.target }}/release/tcpping-server.exe dist/
-          cd dist
-          7z a -tzip ../${{ matrix.artifact_name }}.zip *
+          7z a -tzip ${{ matrix.artifact_name }}.zip tcpping-client.exe tcpping-server.exe
         else
-          cp target/${{ matrix.target }}/release/tcpping-client dist/
-          cp target/${{ matrix.target }}/release/tcpping-server dist/
-          cd dist
-          tar czf ../${{ matrix.artifact_name }}.tar.gz *
+          tar czf ${{ matrix.artifact_name }}.tar.gz tcpping-client tcpping-server
         fi
       shell: bash
 
@@ -82,7 +76,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.artifact_name }}
-        path: ${{ matrix.artifact_name }}.*
+        path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}.${{ runner.os == 'Windows' && 'zip' || 'tar.gz' }}
         retention-days: 7
 
   release:
@@ -93,15 +87,22 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Download Artifacts
+    - name: Download All Artifacts
       uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+    
+    - name: Prepare Release Files
+      run: |
+        mkdir release
+        cp artifacts/tcpping-x86_64-linux-gnu/tcpping-x86_64-linux-gnu.tar.gz release/
+        cp artifacts/tcpping-x86_64-linux-musl/tcpping-x86_64-linux-musl.tar.gz release/
+        cp artifacts/tcpping-x86_64-darwin/tcpping-x86_64-darwin.tar.gz release/
+        cp artifacts/tcpping-aarch64-darwin/tcpping-aarch64-darwin.tar.gz release/
+        cp artifacts/tcpping-x86_64-windows/tcpping-x86_64-windows.zip release/
+      shell: bash
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          tcpping-x86_64-linux-gnu.tar.gz
-          tcpping-x86_64-linux-musl.tar.gz
-          tcpping-x86_64-darwin.tar.gz
-          tcpping-aarch64-darwin.tar.gz
-          tcpping-x86_64-windows.zip
+        files: release/*
