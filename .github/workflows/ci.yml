@@ -10,6 +10,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build and Test
@@ -32,15 +35,19 @@ jobs:
           - build: linux
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            archive: tar.gz
           - build: macos-intel
             os: macos-latest
             target: x86_64-apple-darwin
+            archive: tar.gz
           - build: macos-arm
             os: macos-latest
             target: aarch64-apple-darwin
+            archive: tar.gz
           - build: windows
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            archive: zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -61,20 +68,24 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          cd target/${{ matrix.target }}/release
+          staging="tcpping-${{ matrix.target }}"
+          mkdir -p "$staging"
+          
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            7z a ../../../tcpping-${{ matrix.target }}.zip tcpping-client.exe tcpping-server.exe
+            cp "target/${{ matrix.target }}/release/tcpping-client.exe" "$staging/"
+            cp "target/${{ matrix.target }}/release/tcpping-server.exe" "$staging/"
+            7z a "$staging.${{ matrix.archive }}" "./$staging"
           else
-            tar czvf ../../../tcpping-${{ matrix.target }}.tar.gz tcpping-client tcpping-server
+            cp "target/${{ matrix.target }}/release/tcpping-client" "$staging/"
+            cp "target/${{ matrix.target }}/release/tcpping-server" "$staging/"
+            tar czf "$staging.${{ matrix.archive }}" "./$staging"
           fi
-          cd -
 
       - name: Generate Release
         uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: |
-            tcpping-${{ matrix.target }}.zip
-            tcpping-${{ matrix.target }}.tar.gz
+          files: tcpping-${{ matrix.target }}.${{ matrix.archive }}
           draft: false
           prerelease: false
         env:
