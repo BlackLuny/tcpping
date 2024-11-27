@@ -3,6 +3,7 @@ use clap::Parser;
 use std::time::Instant;
 use tcpping_common::{PingConfig, PingResult, DEFAULT_PACKET_SIZE, DEFAULT_PORT, DEFAULT_THREADS};
 use tokio::net::TcpStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -89,16 +90,16 @@ async fn run_ping(config: PingConfig, thread_id: usize, count: u32) -> Result<()
 
 async fn ping_once(addr: &str, size: usize) -> Result<PingResult> {
     let start = Instant::now();
-    let stream = TcpStream::connect(addr).await?;
+    let mut stream = TcpStream::connect(addr).await?;
 
     let data = vec![1u8; size];
-    stream.try_write(&data)?;
+    stream.write_all(&data).await?;
 
     let mut buf = vec![0u8; size];
-    let n = stream.try_read(&mut buf)?;
+    stream.read_exact(&mut buf).await?;
 
     Ok(PingResult {
         rtt: start.elapsed(),
-        bytes: n,
+        bytes: size,
     })
 }
