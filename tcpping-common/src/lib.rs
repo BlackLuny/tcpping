@@ -10,6 +10,7 @@ pub struct PingConfig {
     pub threads: usize,
     pub host: String,
     pub port: u16,
+    pub keep_alive: bool,
 }
 
 #[derive(Debug)]
@@ -25,6 +26,7 @@ impl Default for PingConfig {
             threads: DEFAULT_THREADS,
             host: "127.0.0.1".to_string(),
             port: DEFAULT_PORT,
+            keep_alive: false,
         }
     }
 }

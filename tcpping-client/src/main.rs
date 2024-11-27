@@ -30,6 +30,10 @@ struct Args {
     /// Number of pings to send (0 for infinite)
     #[arg(short, long, default_value_t = 0)]
     count: u32,
+
+    /// Keep TCP connection alive between pings
+    #[arg(short = 'k', long, default_value_t = false)]
+    keep_alive: bool,
 }
 
 #[tokio::main]
@@ -42,6 +46,7 @@ async fn main() -> Result<()> {
         threads: args.threads,
         host: args.host,
         port: args.port,
+        keep_alive: args.keep_alive,
     };
 
     let mut handles = vec![];
@@ -65,13 +70,24 @@ async fn main() -> Result<()> {
 async fn run_ping(config: PingConfig, thread_id: usize, count: u32) -> Result<()> {
     let addr = format!("{}:{}", config.host, config.port);
     let mut ping_count = 0;
+    let mut stream = if config.keep_alive {
+        Some(connect_with_timeout(&addr).await?)
+    } else {
+        None
+    };
 
     loop {
         if count > 0 && ping_count >= count {
             break;
         }
 
-        match ping_once(&addr, config.packet_size).await {
+        let result = if let Some(ref mut stream) = stream {
+            ping_with_stream(stream, config.packet_size).await
+        } else {
+            ping_once(&addr, config.packet_size).await
+        };
+
+        match result {
             Ok(result) => {
                 info!(
                     "Thread {} - Reply from {}: bytes={} time={:?}",
@@ -80,6 +96,17 @@ async fn run_ping(config: PingConfig, thread_id: usize, count: u32) -> Result<()
             }
             Err(e) => {
                 warn!("Thread {} - Failed to ping {}: {}", thread_id, addr, e);
+                // If using keep-alive and we got an error, try to reconnect
+                if config.keep_alive {
+                    warn!("Thread {} - Attempting to reconnect...", thread_id);
+                    match connect_with_timeout(&addr).await {
+                        Ok(new_stream) => stream = Some(new_stream),
+                        Err(e) => {
+                            warn!("Thread {} - Reconnection failed: {}", thread_id, e);
+                            stream = None;
+                        }
+                    }
+                }
             }
         }
 
@@ -90,16 +117,21 @@ async fn run_ping(config: PingConfig, thread_id: usize, count: u32) -> Result<()
     Ok(())
 }
 
-async fn ping_once(addr: &str, size: usize) -> Result<PingResult> {
+async fn connect_with_timeout(addr: &str) -> Result<TcpStream> {
+    let stream = timeout(Duration::from_secs(5), async {
+        let stream = TcpStream::connect(addr).await?;
+        stream.set_nodelay(true)?;
+        Ok::<_, anyhow::Error>(stream)
+    })
+    .await??;
+    
+    Ok(stream)
+}
+
+async fn ping_with_stream(stream: &mut TcpStream, size: usize) -> Result<PingResult> {
     let start = Instant::now();
     
-    // Set a 5-second timeout for the entire operation
     let result = timeout(Duration::from_secs(5), async {
-        let mut stream = TcpStream::connect(addr).await?;
-        
-        // Set TCP_NODELAY to disable Nagle's algorithm
-        stream.set_nodelay(true)?;
-        
         let data = vec![1u8; size];
         stream.write_all(&data).await?;
         
@@ -115,6 +147,11 @@ async fn ping_once(addr: &str, size: usize) -> Result<PingResult> {
             bytes: size,
         }),
         Ok(Err(e)) => Err(e),
-        Err(_) => anyhow::bail!("connection timed out"),
+        Err(_) => anyhow::bail!("operation timed out"),
     }
+}
+
+async fn ping_once(addr: &str, size: usize) -> Result<PingResult> {
+    let mut stream = connect_with_timeout(addr).await?;
+    ping_with_stream(&mut stream, size).await
 }
