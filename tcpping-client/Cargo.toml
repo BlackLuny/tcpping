@@ -1,0 +1,16 @@
+[package]
+name = "tcpping-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tcpping-common = { path = "../tcpping-common" }
+tokio = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[bin]]
+name = "tcpping-client"
+path = "src/main.rs"
